@@ -253,7 +253,7 @@
     if (!text) return '';
     if (!/^https?:\/\//i.test(text)) text = 'https://' + text;
     const url = new URL(text);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('invalid protocol');
+    if (url.protocol !== 'https:') throw new Error('https required');
     return url.href;
   }
 
@@ -383,7 +383,7 @@
     try {
       const current = await getSession();
       if (!current) return;
-      const rows = await api('/rest/v1/submissions?select=id,site_name,site_url,description,contact,status,created_at&order=created_at.desc', { token: current.access_token });
+      const rows = await api('/rest/v1/nolix_submissions?select=id,site_name:name,site_url:url,description:summary,contact:owner_email,status,created_at&order=created_at.desc', { token: current.access_token });
       list.textContent = '';
       if (!rows || !rows.length) {
         list.appendChild(makeEl('p', 'nlx-empty', '还没有投稿。填写上方表单，提交第一个网站。'));
@@ -404,7 +404,7 @@
     try {
       const current = await getSession();
       if (!current || !isAdmin()) return;
-      const rows = await api('/rest/v1/submissions?select=*&order=created_at.desc', { token: current.access_token });
+      const rows = await api('/rest/v1/nolix_submissions?select=id,user_id:owner_user_id,site_name:name,site_url:url,description:summary,contact:owner_email,status,created_at&order=created_at.desc', { token: current.access_token });
       list.textContent = '';
       if (!rows || !rows.length) {
         list.appendChild(makeEl('p', 'nlx-empty', '暂时没有待审核的投稿。'));
@@ -421,11 +421,11 @@
     try {
       const current = await getSession();
       if (!current) return;
-      await api('/rest/v1/submissions?id=eq.' + encodeURIComponent(id), {
+      await api('/rest/v1/nolix_submissions?id=eq.' + encodeURIComponent(id) + '&status=eq.pending', {
         method: 'PATCH',
         token: current.access_token,
         prefer: 'return=representation',
-        body: { status: status }
+        body: { status: status, reviewed_at: new Date().toISOString() }
       });
       toast(status === 'approved' ? '已通过该投稿' : '已标记为未通过');
       await loadAdmin();
@@ -541,16 +541,16 @@
       button.textContent = '提交中…';
       setFormMessage(message, '', '');
       try {
-        await api('/rest/v1/submissions', {
+        await api('/rest/v1/nolix_submissions', {
           method: 'POST',
           token: current.access_token,
           prefer: 'return=representation',
           body: {
-            user_id: current.user.id,
-            site_name: name,
-            site_url: url,
-            description: description || null,
-            contact: contact || null
+            name: name,
+            url: url,
+            category: '独立作品',
+            summary: description || '由站长提交，等待 Nolix 审核的网站。',
+            relationship: '站长'
           }
         });
         submitForm.reset();
@@ -585,5 +585,42 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+})();
+</script>
+<style id="nlx-directory-live-style">
+.nlx-directory-tools{display:flex;align-items:center;gap:12px;margin-bottom:14px}.nlx-directory-search{flex:1;display:flex;align-items:center;border:1px solid #555b50;background:#242a21;padding:0 14px;min-height:46px}.nlx-directory-search input{width:100%;border:0;outline:0;background:transparent;color:#f5f6f2;font-size:13px}.nlx-directory-count{color:#9fa79b;font-size:11px;white-space:nowrap}.category-row button{border:1px solid #555b50;color:#b8bdb3;background:transparent;padding:9px 14px;font-size:12px;cursor:pointer}.category-row button:hover,.category-row button.is-active{background:var(--lime);border-color:var(--lime);color:#1f241d}.nlx-site-list{border-top:1px solid #4c5348}.nlx-site-row{display:grid;grid-template-columns:58px minmax(0,1fr) 150px 24px;gap:18px;align-items:center;border-bottom:1px solid #4c5348;padding:23px 6px;color:#f4f5f1}.nlx-site-row:hover{background:#292f25}.nlx-site-row strong{font-size:18px}.nlx-site-row small{display:block;color:#a9afa6;line-height:1.55;margin-top:5px}.nlx-site-row .nlx-domain{font-size:10px;color:#7f887b}.nlx-site-no{color:var(--lime);font-size:11px}.nlx-site-category{font-size:12px;color:#a9afa6}.nlx-featured{display:inline-block;border:1px solid #98b76c;color:#caff58;padding:3px 6px;margin-left:8px;font-size:10px}.nlx-directory-status{border-top:1px solid #4c5348;border-bottom:1px solid #4c5348;padding:60px 0;color:#a9afa6}.auth-tabs{display:none!important}.nlx-otp-hint{font-size:11px;color:#73776f;line-height:1.6}.nlx-code-row{display:grid;gap:8px}@media(max-width:700px){.nlx-directory-tools{align-items:stretch;flex-direction:column}.nlx-directory-count{align-self:flex-end}.nlx-site-row{grid-template-columns:28px minmax(0,1fr) 20px;gap:10px}.nlx-site-category{display:none}}
+</style>
+<script id="nlx-directory-live-script">
+(function(){
+  'use strict';
+  const BASE='https://irqxagydrxiwqamaaqoh.supabase.co';
+  const KEY='sb_publishable_GfXE6tNhIyCvZ9vedwEdvA_LWmNXaDv';
+  const SESSION='nolix.auth.session.v1';
+  const ADMIN='liyzhi67@gmail.com';
+  const categories=['设计与创意','开发与工具','学习与知识','生活与效率','独立作品'];
+  const categoryCopy={zh:{'设计与创意':'设计与创意','开发与工具':'开发与工具','学习与知识':'学习与知识','生活与效率':'生活与效率','独立作品':'独立作品'},en:{'设计与创意':'Design','开发与工具':'Development','学习与知识':'Learning','生活与效率':'Productivity','独立作品':'Indie'},ja:{'设计与创意':'デザイン','开发与工具':'開発','学习与知识':'学習','生活与效率':'暮らし','独立作品':'個人作品'}};
+  const words={
+    zh:{all:'全部',search:'搜索网站、简介或域名',loading:'正在载入目录…',none:'没有匹配的网站。',featured:'推广中',dirTitle:'发现目录',dirIntro:'搜索、筛选并打开已经审核的网站。基础收录与付费推广严格分开。',dirNote:'所有通过审核的网站都可进入基础目录；“推广中”仅代表付费置顶，不代表官方认证或安全担保。',login:'邮箱验证码登录',hero:'Nolix 整理值得探索的网站。浏览已审核的站点，或提交你的网站，让认真做的作品被更多人看见。',planTitle:'推广位 · ¥19.90 / 月',planBody:'基础收录免费。付费推广包含目录优先展示与“推广中”标记；当前付款暂未开放。',planHint:'待接入合规商户收款后开放订阅。',planState:'暂未开放',submitRule:'通过审核即可免费进入基础目录；推广位需另行订阅。'},
+    en:{all:'All',search:'Search sites, descriptions, or domains',loading:'Loading directory…',none:'No matching sites.',featured:'Featured',dirTitle:'The directory',dirIntro:'Search, filter, and open reviewed websites. Basic inclusion stays separate from paid promotion.',dirNote:'Every approved site can join the basic directory. Featured means paid placement only, not certification or a safety guarantee.',login:'Email code sign-in',hero:'Nolix curates websites worth exploring. Browse reviewed sites or submit your own work.',planTitle:'Featured placement · ¥19.90 / month',planBody:'Basic inclusion is free. The paid plan adds priority placement and a Featured badge; payments are not open yet.',planHint:'Subscriptions will open after a compliant merchant payment channel is connected.',planState:'Coming later',submitRule:'Approved sites enter the basic directory for free; featured placement is a separate subscription.'},
+    ja:{all:'すべて',search:'サイト名・説明・ドメインを検索',loading:'一覧を読み込み中…',none:'該当するサイトがありません。',featured:'注目掲載',dirTitle:'サイト一覧',dirIntro:'審査済みサイトを検索・絞り込みできます。基本掲載と有料プロモーションは分離しています。',dirNote:'承認済みサイトは基本一覧に掲載できます。注目掲載は有料の優先表示であり、安全保証ではありません。',login:'メール認証コード',hero:'Nolix は訪れる価値のあるサイトを紹介します。審査済みサイトを探したり、ご自身のサイトを投稿できます。',planTitle:'注目掲載 · 月額 ¥19.90',planBody:'基本掲載は無料です。有料プランでは優先表示と注目掲載バッジを提供します。現在、支払い受付は未開始です。',planHint:'適切な事業者向け決済を接続後、購読を開始します。',planState:'準備中',submitRule:'審査承認後は基本一覧へ無料掲載。有料の注目掲載は別契約です。'}
+  };
+  let locale=localStorage.getItem('nolix.locale')||'zh';
+  let rows=[];
+  let active='';
+  let query='';
+  let listEl,countEl,searchEl,categoryEl,statusEl;
+  function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!=null)node.textContent=text;return node}
+  async function request(path,options){options=options||{};const response=await fetch(BASE+path,{method:options.method||'GET',headers:{apikey:KEY,'Content-Type':'application/json',...(options.token?{Authorization:'Bearer '+options.token}:{})},body:options.body?JSON.stringify(options.body):undefined});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error((data&&(data.msg||data.message))||'Request failed');return data}
+  function renderCategories(){categoryEl.textContent='';[['',words[locale].all],...categories.map(c=>[c,categoryCopy[locale][c]])].forEach(([value,label])=>{const b=el('button',value===active?'is-active':'',label);b.type='button';b.onclick=()=>{active=value;renderCategories();renderDirectory()};categoryEl.appendChild(b)})}
+  function renderDirectory(){if(!listEl)return;const needle=query.trim().toLowerCase();const visible=rows.filter(item=>(!active||item.category===active)&&(!needle||(`${item.name} ${item.summary} ${item.url}`).toLowerCase().includes(needle)));countEl.textContent=visible.length+' / '+rows.length;listEl.textContent='';statusEl.hidden=true;if(!visible.length){statusEl.hidden=false;statusEl.textContent=rows.length?words[locale].none:words[locale].loading;return}visible.forEach((item,index)=>{const a=el('a','nlx-site-row');a.href=item.url;a.target='_blank';a.rel='noopener noreferrer nofollow';a.appendChild(el('span','nlx-site-no',String(index+1).padStart(2,'0')));const detail=el('span','');const title=el('strong','',item.name);if(item.display_until&&item.display_until>new Date().toISOString())title.appendChild(el('span','nlx-featured',words[locale].featured));detail.appendChild(title);detail.appendChild(el('small','',item.summary));try{detail.appendChild(el('small','nlx-domain',new URL(item.url).hostname.replace(/^www\./,'')))}catch(e){}a.appendChild(detail);a.appendChild(el('span','nlx-site-category',categoryCopy[locale][item.category]||item.category));a.appendChild(el('span','', '↗'));listEl.appendChild(a)})}
+  async function loadDirectory(){statusEl.hidden=false;statusEl.textContent=words[locale].loading;try{rows=await request('/rest/v1/nolix_public_listings?select=id,name,url,category,summary,display_until&order=display_until.desc.nullslast,reviewed_at.desc');renderDirectory()}catch(e){statusEl.textContent='目录暂时无法载入，请稍后刷新。'}}
+  function setupDirectory(){const section=document.querySelector('#directory .wrap');if(!section)return;const old=section.querySelector('.directory-empty');const oldCategories=section.querySelector('.category-row');const note=section.querySelector('.directory-note');if(old)old.remove();const tools=el('div','nlx-directory-tools');const label=el('label','nlx-directory-search');searchEl=document.createElement('input');searchEl.type='search';searchEl.placeholder=words[locale].search;searchEl.oninput=()=>{query=searchEl.value;renderDirectory()};label.appendChild(searchEl);countEl=el('span','nlx-directory-count','0 / 0');tools.append(label,countEl);section.insertBefore(tools,oldCategories);categoryEl=oldCategories;categoryEl.textContent='';listEl=el('div','nlx-site-list');statusEl=el('div','nlx-directory-status',words[locale].loading);section.insertBefore(listEl,note);section.insertBefore(statusEl,note);renderCategories();loadDirectory()}
+  function saveSession(data){localStorage.setItem(SESSION,JSON.stringify({access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+((data.expires_in||3600)*1000),user:data.user||null}))}
+  function setupOtp(){document.querySelectorAll('[data-auth-open]').forEach((b,i)=>{b.setAttribute('data-auth-open','login');if(i>0)b.hidden=true;else b.textContent=words[locale].login});const old=document.getElementById('nlx-login-form');const register=document.getElementById('nlx-register-form');if(!old)return;if(register)register.hidden=true;const form=old.cloneNode(false);old.replaceWith(form);form.innerHTML='<div class="nlx-field"><label for="nlx-otp-email">邮箱</label><input id="nlx-otp-email" type="email" autocomplete="email" required placeholder="you@example.com"></div><div class="nlx-field nlx-code-row" id="nlx-code-wrap" hidden><label for="nlx-otp-code">邮件验证码</label><input id="nlx-otp-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="输入验证码"></div><button type="submit" class="nlx-btn nlx-btn-dark auth-submit">发送验证码</button><p id="nlx-otp-message" class="auth-message" role="status"></p><p class="nlx-otp-hint">新用户会自动注册，无需密码。验证码用于确认邮箱归属。</p>';let sent=false;form.onsubmit=async(event)=>{event.preventDefault();const email=document.getElementById('nlx-otp-email').value.trim().toLowerCase();const code=document.getElementById('nlx-otp-code').value.trim();const msg=document.getElementById('nlx-otp-message');const button=form.querySelector('button');msg.textContent='';button.disabled=true;try{if(!sent){await request('/auth/v1/otp',{method:'POST',body:{email:email,create_user:true}});sent=true;document.getElementById('nlx-code-wrap').hidden=false;button.textContent='验证并登录';msg.textContent='验证码已发送，请检查邮箱。'}else{const data=await request('/auth/v1/verify',{method:'POST',body:{type:'email',email:email,token:code}});saveSession(data);location.reload()}}catch(e){msg.textContent='操作失败：'+e.message}finally{button.disabled=false;if(!sent)button.textContent='发送验证码'}}}
+  function applyLocale(){const w=words[locale];const select=document.querySelector('.preference-language select');if(select)select.value=locale;const h2=document.querySelector('#directory h2');if(h2)h2.textContent=w.dirTitle+'.';const intro=document.querySelector('#directory .section-heading>p');if(intro)intro.textContent=w.dirIntro;const note=document.querySelector('#directory .directory-note');if(note)note.textContent=w.dirNote;const hero=document.querySelector('.hero-description');if(hero)hero.textContent=w.hero;const planTitle=document.getElementById('payment-title');if(planTitle)planTitle.textContent=w.planTitle;const planBody=document.querySelector('.payment-copy>p:not(.section-index)');if(planBody)planBody.textContent=w.planBody;const planHint=document.querySelector('.payment-hint');if(planHint)planHint.textContent=w.planHint;const price=document.querySelector('.payment-price strong');if(price)price.textContent='¥19.90';const state=document.querySelector('.payment-price small');if(state)state.textContent=w.planState;const rule=document.querySelector('.submit-rule p');if(rule)rule.textContent=w.submitRule;if(searchEl)searchEl.placeholder=w.search;const title=document.getElementById('nlx-auth-title');if(title)title.textContent=w.login;renderCategories();renderDirectory()}
+  function setupPreferences(){const select=document.querySelector('.preference-language select');if(select){select.value=locale;select.onchange=()=>{locale=select.value;localStorage.setItem('nolix.locale',locale);applyLocale()}}const palette={green:['#789927','#d9efad','#3b4a28','#caff58'],blue:['#25729a','#c6ecfa','#204352','#9bdef7'],violet:['#76539a','#eadcf7','#4d365c','#dec4f5']};document.querySelectorAll('.theme-swatch').forEach(btn=>{btn.onclick=()=>{const name=['green','blue','violet'].find(x=>btn.classList.contains(x))||'green';const p=palette[name];document.documentElement.style.setProperty('--brand-accent',p[0]);document.documentElement.style.setProperty('--top-bg',p[1]);document.documentElement.style.setProperty('--top-fg',p[2]);document.documentElement.style.setProperty('--lime',p[3]);localStorage.setItem('nolix.theme',name);document.querySelectorAll('.theme-swatch').forEach(x=>x.classList.toggle('selected',x===btn))}});const saved=localStorage.getItem('nolix.theme');if(saved){const btn=document.querySelector('.theme-swatch.'+saved);if(btn)btn.click()}}
+  function protectAdminUi(){let local=null;try{local=JSON.parse(localStorage.getItem(SESSION)||'null')}catch(e){}const email=local&&local.user&&String(local.user.email||'').toLowerCase();if(email!==ADMIN){const panel=document.getElementById('nlx-admin-panel');if(panel)panel.remove()}}
+  function init(){setupDirectory();setupOtp();setupPreferences();applyLocale();protectAdminUi();document.querySelector('.footer small')?.replaceChildren(document.createTextNode('基础收录免费 / 推广付款暂未开放'))}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script></body></html>
