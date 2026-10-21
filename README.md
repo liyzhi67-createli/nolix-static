@@ -17,7 +17,9 @@ Static HTML shells are public on GitHub Pages. They contain no private records. 
 
 ## Development
 
-Run `node tools/preview.cjs` for http://127.0.0.1:4173 and `node tools/check.cjs` for translation parity, routes and mocked edge checks. The latter uses the existing sibling project's TypeScript installation to check the Edge Function.
+Run `node tools/preview.cjs` for http://127.0.0.1:4173. Before publication, run `node tools/prepare-release.cjs` to fingerprint the application, translations, appearance bootstrap, styles and brand asset. Keep old generated assets available for cached HTML. Run `node tools/check.cjs` and `node tools/appearance-check.cjs` for localized routes, role renders, mocked edge checks, display-mode persistence, prepaint behavior, reduced motion and contrast checks. The edge checks use the existing sibling project's TypeScript installation.
+
+The header supports light/dark toggling, and account preferences add a system-following option. Preferences are stored locally under `noliz.appearance`; switching appearance does not recreate forms. A small synchronous self-hosted bootstrap sets the palette before the stylesheet paints. Home motion uses one-time entry sequences, IntersectionObserver reveals and a requestAnimationFrame-throttled depth effect. It respects `prefers-reduced-motion` and disables pointer tilt for coarse pointers. English/Latin text uses self-hosted Inter Variable (OFL license included); Chinese and Japanese use language-specific native font stacks with adjusted weight, spacing and line height. No Apple proprietary fonts or remote font-service calls are required.
 
 ## Backend
 
