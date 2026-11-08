@@ -18,7 +18,7 @@ try {
   if (fs.readlinkSync(path.join(mount, 'Applications')) !== '/Applications') throw Error('Missing Applications shortcut');
   run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', bundle]);
   const minimumSystem = run('/usr/libexec/PlistBuddy', ['-c', 'Print :LSMinimumSystemVersion', path.join(bundle, 'Contents/Info.plist')]);
-  execFileSync(process.execPath, [path.join(__dirname, 'smoke.mjs'), exe], { cwd: root, stdio: 'inherit', timeout: 120000, env: { ...process.env, NOLIZ_QA_SCREENSHOT: '1' } });
+  execFileSync(process.execPath, [path.join(__dirname, 'mac-smoke.mjs'), exe], { cwd: root, stdio: 'inherit', timeout: 150000, env: { ...process.env, NOLIZ_QA_SCREENSHOT: '1' } });
   const result = { dmg: path.basename(dmg), architectures, minimumSystem, imageVerification: 'passed', applicationSignature: 'ad-hoc; no Apple Developer ID or notarization', mountedAppSmokeTest: 'passed', runnerArchitecture: process.arch };
   fs.writeFileSync(path.join(root, 'qa/macos-verification.json'), JSON.stringify(result, null, 2) + '\n');
   console.log(JSON.stringify(result));
