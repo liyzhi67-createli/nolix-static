@@ -35,6 +35,7 @@ jobs:
           NODE
           cp noliz-macos-tests/smoke.mjs desktop/scripts/smoke.mjs
           cp noliz-macos-tests/verify-macos.cjs desktop/scripts/verify-macos.cjs
+          cp noliz-macos-tests/mac-smoke.mjs desktop/scripts/mac-smoke.mjs
       - name: Install locked build dependencies
         working-directory: desktop
         run: npm ci
@@ -47,7 +48,7 @@ jobs:
         run: |
           node node_modules/electron/install.js
           npm run prepare:site
-          node scripts/smoke.mjs
+          node scripts/mac-smoke.mjs
       - name: Build universal DMG
         working-directory: desktop
         run: npm run dist:mac
@@ -83,3 +84,5 @@ jobs:
             desktop/dist/*.dmg
             desktop/qa/*.json
             desktop/qa/*.png
+            desktop/qa/*.txt
+            desktop/qa/*.log
