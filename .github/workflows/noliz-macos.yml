@@ -45,6 +45,7 @@ jobs:
         working-directory: desktop
         timeout-minutes: 3
         run: |
+          node node_modules/electron/install.js
           npm run prepare:site
           node scripts/smoke.mjs
       - name: Build universal DMG
