@@ -32,7 +32,7 @@ try {
  }
  browser = await chromium.connectOverCDP('http://127.0.0.1:'+port, {timeout:15000});
  const context = browser.contexts()[0]; context.setDefaultTimeout(20000);
- const page = context.pages().find(page => page.url().startsWith('noliz://')) || await context.waitForEvent('page');
+ const page = context.pages()[0] || await context.waitForEvent('page');
  const errors=[]; page.on('pageerror', error => errors.push(error.message));
  await page.locator('.hero-title').waitFor(); await page.locator('#locale').selectOption('zh');
  await page.locator('#home-listings .site-card').first().waitFor({timeout:25000});
@@ -51,8 +51,12 @@ try {
  const nextWindow = context.waitForEvent('page', {timeout:20000});
  execFileSync('/usr/bin/open', ['-a',bundle]);
  const reopened = await nextWindow; await reopened.locator('.hero-title').waitFor();
+ await reopened.waitForFunction(() => document.documentElement.lang==='en' && document.documentElement.dataset.appearance==='dark', null, {timeout:15000}).catch(async error => {
+  log('Reopened preferences: '+JSON.stringify(await reopened.evaluate(() => ({language:document.documentElement.lang, appearance:document.documentElement.dataset.appearance, storedLanguage:localStorage.getItem('nolix.locale'), storedAppearance:localStorage.getItem('noliz.appearance')}))));
+  throw error;
+ });
  const persisted = await reopened.evaluate(() => ({language:document.documentElement.lang, appearance:document.documentElement.dataset.appearance}));
- if (persisted.language!=='en'||persisted.appearance!=='dark') throw Error('Preferences were lost when reopening the window');
+ if (persisted.language!=='en'||persisted.appearance!=='dark') throw Error('Preferences were lost when reopening the window: '+JSON.stringify(persisted));
  log('Native application activation and preferences passed.');
  await reopened.locator('#locale').selectOption('zh'); await reopened.locator('[data-action="toggle-appearance"]').click();
  await reopened.locator('a[href="/login/"]').first().click(); await reopened.waitForURL('noliz://app/login/');
