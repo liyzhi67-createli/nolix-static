@@ -42,7 +42,7 @@ jobs:
       - name: Test local protocol and navigation rules
         working-directory: desktop
         run: npm test
-      - name: Test macOS window lifecycle before packaging
+      - name: Verify macOS window activation and saved preferences
         working-directory: desktop
         timeout-minutes: 3
         run: |
