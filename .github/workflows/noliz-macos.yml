@@ -34,17 +34,25 @@ jobs:
           console.log('Restored '+payload.files.length+' verified files.');
           NODE
           cp noliz-macos-tests/smoke.mjs desktop/scripts/smoke.mjs
+          cp noliz-macos-tests/verify-macos.cjs desktop/scripts/verify-macos.cjs
       - name: Install locked build dependencies
         working-directory: desktop
         run: npm ci
       - name: Test local protocol and navigation rules
         working-directory: desktop
         run: npm test
+      - name: Test macOS window lifecycle before packaging
+        working-directory: desktop
+        timeout-minutes: 3
+        run: |
+          npm run prepare:site
+          node scripts/smoke.mjs
       - name: Build universal DMG
         working-directory: desktop
         run: npm run dist:mac
       - name: Mount and test packaged application
         working-directory: desktop
+        timeout-minutes: 3
         run: node scripts/verify-macos.cjs
       - name: Prepare shareable files
         working-directory: desktop
