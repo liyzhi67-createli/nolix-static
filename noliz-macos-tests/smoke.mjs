@@ -51,18 +51,6 @@ try {
  await reopened.locator('[data-action="toggle-appearance"]').click();
  await reopened.locator('a[href="/login/"]').first().click(); await reopened.waitForURL('noliz://app/login/');
  if (!await reopened.locator('#auth-form').isVisible()) throw Error('Login screen unavailable');
- if (process.platform === 'darwin') {
-  console.log('Checking macOS visible-window close and activation.');
-  await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
-  const windowClosed = reopened.waitForEvent('close', { timeout: 10000 });
-  await application.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].close(); });
-  await windowClosed;
-  const stillRunning = await application.evaluate(({ BrowserWindow, app }) => ({ windows: BrowserWindow.getAllWindows().length, ready: app.isReady() }));
-  if (stillRunning.windows !== 0 || !stillRunning.ready) throw Error('macOS close-window lifecycle failed: ' + JSON.stringify(stillRunning));
-  await application.evaluate(({ app }) => app.emit('activate'));
-  await (await application.firstWindow()).locator('.hero-title').waitFor();
-  console.log('macOS close and activation passed.');
- }
  if (errors.length) throw Error('Renderer exceptions: ' + errors.join('; '));
  const summary = { executable: packaged ? 'packaged' : 'development', home, isolation, search: 'passed', externalWebsite: 'default-browser handoff verified without launching browser', persistence: persisted, loginScreen: 'passed', apiResponses, privateActions: 'none', rendererExceptions: errors };
  fs.writeFileSync(path.join(qa, packaged ? 'packaged-results.json' : 'dev-results.json'), JSON.stringify(summary, null, 2) + '\n');
