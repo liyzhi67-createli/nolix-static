@@ -1,0 +1,74 @@
+name: Build Noliz macOS DMG
+on:
+  push:
+    branches: ['build/noliz-macos-*']
+    paths: ['.github/workflows/noliz-macos.yml', 'noliz-macos-build/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15-intel
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Restore isolated desktop build sources
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const zlib = require('node:zlib');
+          const encoded = fs.readdirSync('noliz-macos-build').filter(name => /^source\.\d+\.b64$/.test(name)).sort().map(name => fs.readFileSync(path.join('noliz-macos-build', name), 'utf8')).join('');
+          const payload = JSON.parse(zlib.gunzipSync(Buffer.from(encoded, 'base64')));
+          for (const entry of payload.files) {
+            if (!entry.path.startsWith('desktop/') || entry.path.includes('..') || entry.path.includes('\\')) throw Error('Invalid build input path');
+            const data = Buffer.from(entry.data, 'base64');
+            if (crypto.createHash('sha256').update(data).digest('hex') !== entry.sha256) throw Error('Build input checksum mismatch');
+            fs.mkdirSync(path.dirname(entry.path), {recursive: true});
+            fs.writeFileSync(entry.path, data);
+          }
+          console.log('Restored '+payload.files.length+' verified files.');
+          NODE
+      - name: Install locked build dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Test local protocol and navigation rules
+        working-directory: desktop
+        run: npm test
+      - name: Build universal DMG
+        working-directory: desktop
+        run: npm run dist:mac
+      - name: Mount and test packaged application
+        working-directory: desktop
+        run: node scripts/verify-macos.cjs
+      - name: Prepare shareable files
+        working-directory: desktop
+        run: |
+          cp README.md dist/READ-ME.md
+          cd dist
+          shasum -a 256 *.dmg > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Noliz-macOS-universal-1.0.0
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/READ-ME.md
+            desktop/dist/SHA256SUMS.txt
+            desktop/qa/macos-verification.json
+            desktop/qa/packaged-results.json
+            desktop/qa/packaged-home.png
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Noliz-macOS-build-diagnostics
+          path: |
+            desktop/dist/builder-debug.yml
+            desktop/dist/builder-effective-config.yaml
+            desktop/qa/*.json
+            desktop/qa/*.png
