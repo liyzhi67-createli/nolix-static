@@ -1,0 +1,69 @@
+const { _electron: electron } = await import('playwright-core').catch(() => import('../../copy-review/qa/node_modules/playwright-core/index.mjs'));
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const packaged = process.argv[2] ? path.resolve(process.argv[2]) : null;
+const executablePath = packaged || path.join(root, 'node_modules/electron/dist', process.platform === 'darwin' ? 'Electron.app/Contents/MacOS/Electron' : 'electron.exe');
+const qa = path.join(root, 'qa'); fs.mkdirSync(qa, { recursive: true });
+const env = { ...process.env, NOLIZ_TEST_DATA_DIR: path.join(qa, packaged ? 'packaged-profile' : 'dev-profile') };
+delete env.ELECTRON_RUN_AS_NODE;
+const launch = () => electron.launch({ executablePath, args: [...(packaged ? [] : [root]), '--noliz-smoke-test'], cwd: packaged ? path.dirname(executablePath) : root, env, timeout: 60000 });
+let application;
+const errors = [], apiResponses = [];
+try {
+ application = await launch();
+ const page = await application.firstWindow();
+ page.on('pageerror', error => errors.push(error.message));
+ page.on('response', response => { if (response.url().includes('.supabase.co/')) apiResponses.push({ path: new URL(response.url()).pathname, status: response.status() }); });
+ await page.waitForLoadState('domcontentloaded');
+ await page.locator('.hero-title').waitFor();
+ await page.locator('#locale').selectOption('zh');
+ await page.locator('#home-listings .site-card').first().waitFor({ timeout: 25000 });
+ const home = await page.evaluate(() => ({ url: location.href, background: getComputedStyle(document.body).backgroundColor, artwork: document.querySelectorAll('.scene-card').length, nodeAvailable: typeof window.require !== 'undefined' || typeof window.process !== 'undefined', listings: document.querySelectorAll('#home-listings .site-card').length }));
+ if (home.url !== 'noliz://app/' || home.artwork !== 2 || home.nodeAvailable) throw Error('Desktop home or renderer isolation failed: ' + JSON.stringify(home));
+ const isolation = await application.evaluate(({ BrowserWindow }) => { const prefs = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences(); return { sandbox: prefs.sandbox, contextIsolation: prefs.contextIsolation, nodeIntegration: prefs.nodeIntegration }; });
+ if (!isolation.sandbox || !isolation.contextIsolation || isolation.nodeIntegration) throw Error('Unsafe renderer preferences');
+ if (process.env.NOLIZ_QA_SCREENSHOT === '1') {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => document.fonts.ready);
+  const png = await application.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG().toString('base64'));
+  fs.writeFileSync(path.join(qa, packaged ? 'packaged-home.png' : 'desktop-home.png'), Buffer.from(png, 'base64'));
+ }
+ await page.locator('.hero .actions a[href="/search/"]').click();
+ await page.waitForURL('noliz://app/search/');
+ await page.locator('#query').fill('Google'); await page.locator('#query').press('Enter');
+ await page.waitForFunction(() => document.querySelector('#directory-results')?.innerText.includes('Google'));
+ await page.locator('#query').fill(''); await page.locator('#query').press('Enter');
+ await application.evaluate(({ shell }) => { globalThis.nolizTestExternal = []; shell.openExternal = async url => { globalThis.nolizTestExternal.push(url); }; });
+ await page.locator('#directory-results .card-bottom a').first().click();
+ const opened = await application.evaluate(() => globalThis.nolizTestExternal);
+ if (!opened.length || !opened[0].startsWith('https://')) throw Error('External website handoff failed');
+ await page.locator('#locale').selectOption('en');
+ const appearance = await page.locator('html').getAttribute('data-appearance');
+ if (appearance !== 'dark') await page.locator('[data-action="toggle-appearance"]').click();
+ await application.close(); application = null;
+ application = await launch();
+ const reopened = await application.firstWindow(); await reopened.locator('.hero-title').waitFor();
+ const persisted = await reopened.evaluate(() => ({ language: document.documentElement.lang, appearance: document.documentElement.dataset.appearance }));
+ if (persisted.language !== 'en' || persisted.appearance !== 'dark') throw Error('Preferences did not survive restart');
+ await reopened.locator('#locale').selectOption('zh');
+ await reopened.locator('[data-action="toggle-appearance"]').click();
+ await reopened.locator('a[href="/login/"]').first().click(); await reopened.waitForURL('noliz://app/login/');
+ if (!await reopened.locator('#auth-form').isVisible()) throw Error('Login screen unavailable');
+ if (process.platform === 'darwin') {
+  await application.evaluate(({ BrowserWindow }) => new Promise(resolve => {
+   const window = BrowserWindow.getAllWindows()[0];
+   window.once('closed', resolve);
+   window.close();
+  }));
+  const stillRunning = await application.evaluate(({ BrowserWindow, app }) => ({ windows: BrowserWindow.getAllWindows().length, ready: app.isReady() }));
+  if (stillRunning.windows !== 0 || !stillRunning.ready) throw Error('macOS close-window lifecycle failed: ' + JSON.stringify(stillRunning));
+  await application.evaluate(({ app }) => app.emit('activate'));
+  await (await application.firstWindow()).locator('.hero-title').waitFor();
+ }
+ if (errors.length) throw Error('Renderer exceptions: ' + errors.join('; '));
+ const summary = { executable: packaged ? 'packaged' : 'development', home, isolation, search: 'passed', externalWebsite: 'default-browser handoff verified without launching browser', persistence: persisted, loginScreen: 'passed', apiResponses, privateActions: 'none', rendererExceptions: errors };
+ fs.writeFileSync(path.join(qa, packaged ? 'packaged-results.json' : 'dev-results.json'), JSON.stringify(summary, null, 2) + '\n');
+ console.log(JSON.stringify(summary));
+} finally { if (application) await application.close(); }
