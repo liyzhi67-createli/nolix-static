@@ -1,0 +1,21 @@
+name: Stop superseded Noliz build check
+on:
+  push:
+    branches: ['build/noliz-macos-*']
+    paths: ['.github/workflows/noliz-build-cleanup.yml']
+permissions:
+  actions: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const params = {owner: context.repo.owner, repo: context.repo.repo, run_id: 42473106834};
+            const {data} = await github.rest.actions.getWorkflowRun(params);
+            if (data.status !== 'completed') {
+              await github.rest.actions.cancelWorkflowRun(params);
+              console.log('Stopped superseded test attempt.');
+            }
