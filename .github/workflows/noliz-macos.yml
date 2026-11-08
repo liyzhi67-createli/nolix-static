@@ -33,6 +33,7 @@ jobs:
           }
           console.log('Restored '+payload.files.length+' verified files.');
           NODE
+          cp noliz-macos-tests/smoke.mjs desktop/scripts/smoke.mjs
       - name: Install locked build dependencies
         working-directory: desktop
         run: npm ci
@@ -70,5 +71,6 @@ jobs:
           path: |
             desktop/dist/builder-debug.yml
             desktop/dist/builder-effective-config.yaml
+            desktop/dist/*.dmg
             desktop/qa/*.json
             desktop/qa/*.png
