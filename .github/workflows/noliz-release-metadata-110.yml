@@ -1,0 +1,16 @@
+name: Fix Noliz installation note filename
+on:
+  push:
+    branches: ['build/noliz-desktop-1.1.0-*']
+    paths: ['.github/workflows/noliz-release-metadata-110.yml']
+permissions:
+  contents: write
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateReleaseAsset({owner:context.repo.owner,repo:context.repo.repo,asset_id:727372899,name:'Noliz-installation.txt',label:'安装与使用说明'});
