@@ -1,0 +1,123 @@
+name: Build and publish Noliz desktop 1.1.0
+on:
+  push:
+    branches: ['build/noliz-desktop-1.1.0-*']
+    paths: ['.github/workflows/noliz-desktop-release.yml', 'noliz-desktop-build/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: noliz-desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: Windows
+          - os: macos-15-intel
+            platform: macOS
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Restore verified desktop source files
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),zlib=require('node:zlib');
+          const encoded=fs.readdirSync('noliz-desktop-build').filter(n=>/^source\.\d+\.b64$/.test(n)).sort().map(n=>fs.readFileSync(path.join('noliz-desktop-build',n),'utf8')).join('');
+          const payload=JSON.parse(zlib.gunzipSync(Buffer.from(encoded,'base64')));
+          for(const entry of payload.files){
+            if(!entry.path.startsWith('desktop/')||entry.path.includes('..')||entry.path.includes('\\'))throw Error('Invalid build input path');
+            const bytes=Buffer.from(entry.data,'base64');
+            if(crypto.createHash('sha256').update(bytes).digest('hex')!==entry.sha256)throw Error('Build input checksum mismatch');
+            fs.mkdirSync(path.dirname(entry.path),{recursive:true});fs.writeFileSync(entry.path,bytes);
+          }
+          console.log('Restored '+payload.files.length+' verified files.');
+          NODE
+      - name: Install locked dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Verify local protocol and navigation boundaries
+        working-directory: desktop
+        run: npm test
+      - name: Check macOS application and library before packaging
+        if: matrix.platform == 'macOS'
+        working-directory: desktop
+        timeout-minutes: 4
+        run: |
+          node node_modules/electron/install.js
+          npm run prepare:site
+          node scripts/mac-smoke.mjs
+      - name: Build Windows portable app
+        if: matrix.platform == 'Windows'
+        working-directory: desktop
+        run: npm run dist
+      - name: Verify packaged Windows library and appearance
+        if: matrix.platform == 'Windows'
+        working-directory: desktop
+        timeout-minutes: 4
+        run: node scripts/client-check.mjs dist/win-unpacked/Noliz.exe
+      - name: Build universal macOS DMG
+        if: matrix.platform == 'macOS'
+        working-directory: desktop
+        run: npm run dist:mac
+      - name: Mount and verify packaged macOS app
+        if: matrix.platform == 'macOS'
+        working-directory: desktop
+        timeout-minutes: 4
+        run: node scripts/verify-macos.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Noliz-${{ matrix.platform }}-1.1.0
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/qa/*results.json
+            desktop/qa/macos-verification.json
+            desktop/qa/client-110-home.png
+            desktop/qa/packaged-home.png
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Noliz-${{ matrix.platform }}-diagnostics
+          path: |
+            desktop/qa/*.txt
+            desktop/qa/*.log
+            desktop/qa/*.json
+            desktop/qa/*.png
+            desktop/dist/builder-debug.yml
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Noliz-*-1.1.0
+          path: release-input
+          merge-multiple: true
+      - name: Prepare download checksums and installation notes
+        run: |
+          cp noliz-desktop-build/install-notes.txt release-input/dist/Noliz-安装说明.txt
+          cd release-input/dist
+          sha256sum *.exe *.dmg > SHA256SUMS.txt
+      - name: Publish tested installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create desktop-v1.1.0 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Noliz 1.1.0 桌面版" --notes-file noliz-desktop-build/release-notes.md release-input/dist/*.exe release-input/dist/*.dmg release-input/dist/SHA256SUMS.txt release-input/dist/Noliz-安装说明.txt

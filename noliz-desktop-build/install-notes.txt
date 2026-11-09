@@ -1,0 +1,15 @@
+Noliz 1.1.0
+
+官网：https://noliz.cloud/
+
+Windows：下载 Noliz-1.1.0-Windows-x64.exe，直接打开。适用于 Windows 10 / 11 64 位系统，无需安装其他运行环境。当前版本没有代码签名证书。
+
+macOS：打开 Noliz-1.1.0-macOS-universal.dmg，把 Noliz 拖入 Applications，再从“应用程序”打开。适用于 macOS 13 及以上的 Apple 芯片与 Intel Mac。此版尚未做 Apple Developer ID 签名和公证，首次启动可能需要在“系统设置 → 隐私与安全性”中确认打开。
+Apple 官方说明：https://support.apple.com/zh-cn/102445
+
+收藏：在网站卡片上点击星形按钮，从顶部“网站库”或左侧“我的收藏”打开。
+最近访问：从目录访问过的网站会显示在左侧“最近访问”中；清空后可以撤销。
+收藏和最近访问只保存在当前设备，不与网页端同步。目录数据、账号和投稿需要联网。
+打开外部网站时会调用默认浏览器。
+
+本版本没有自动更新功能，请通过官网下载后续版本。
